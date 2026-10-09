@@ -1,11 +1,51 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  CheckCircle, ShieldAlert, Navigation, Search, FileText, Languages, 
-  ArrowRight, Users, Sparkles, Building, MapPin, CheckSquare, RefreshCw, 
-  Server, Plus
+  CheckCircle, ShieldAlert, Navigation, FileText, Languages,
+  Sparkles, Building, MapPin, RefreshCw, Server, Plus
 } from 'lucide-react';
+
+interface FoodItem {
+  name: string;
+  quantity: number;
+  unit: string;
+  is_leftover?: boolean;
+  is_veg?: boolean;
+  prep_time?: string;
+  expiry_time?: string;
+}
+
+interface Donation {
+  id: string;
+  title: string;
+  pickup_address: string;
+  status: string;
+  is_demo?: boolean;
+  latitude?: number;
+  longitude?: number;
+  food_items?: FoodItem[];
+}
+
+interface ActiveTask {
+  id: string;
+  donation_id: string;
+  title?: string;
+  pickup_address?: string;
+  qr_token: string;
+  status: string;
+}
+
+interface AuditLog { action: string; resource: string; timestamp: string; }
+interface Analytics { active_donations_unclaimed?: number; completed_donations_saved?: number; }
+interface ParsedListing { name: string; quantity: number; unit: string; }
+interface RagResponse { answer: string; citations?: unknown[]; }
+interface ApiError { detail?: string; }
+interface AssignResponse { task_id?: string; qr_token?: string; }
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "An unexpected error occurred.";
+}
 
 export default function LandingPage() {
   const [activeTab, setActiveTab] = useState<'home' | 'donor' | 'ngo' | 'volunteer' | 'admin'>('home');
@@ -56,21 +96,20 @@ export default function LandingPage() {
   const currentT = t[lang];
 
   // Persistent server-backed state variables (React state holds the UI view cached from API)
-  const [donations, setDonations] = useState<any[]>([]);
-  const [demands, setDemands] = useState<any[]>([]);
-  const [activeTask, setActiveTask] = useState<any>(null);
-  const [auditLogs, setAuditLogs] = useState<any[]>([]);
-  const [analytics, setAnalytics] = useState<any>(null);
-  const [isDemoMode, setIsDemoMode] = useState(true);
+  const [donations, setDonations] = useState<Donation[]>([]);
+  const [activeTask, setActiveTask] = useState<ActiveTask | null>(null);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [isDemoMode] = useState(true);
 
   // AI & RAG states
   const [aiText, setAiText] = useState("We have about 45 veg biryani boxes, prepared at 1 PM.");
-  const [parsedData, setParsedData] = useState<any>(null);
+  const [parsedData, setParsedData] = useState<ParsedListing | null>(null);
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState("");
   
   const [ragQuestion, setRagQuestion] = useState("What is the handover temperature for unserved surplus?");
-  const [ragResponse, setRagResponse] = useState<any>(null);
+  const [ragResponse, setRagResponse] = useState<RagResponse | null>(null);
   const [ragSearching, setRagSearching] = useState(false);
 
   // Form states (Donor)
@@ -80,17 +119,14 @@ export default function LandingPage() {
   const [isLeftover, setIsLeftover] = useState(false);
   const [createMsg, setCreateMsg] = useState("");
 
-  // OSRM Routing Fallback
-  const [routeInfo, setRouteInfo] = useState<any>(null);
-
   // Fetch data directly from backend on mount
-  const refreshBackendData = async () => {
+  const refreshBackendData = useCallback(async () => {
     try {
       // 1. Fetch real analytics from FastAPI database models
       const anaRes = await fetch(`${API_URL}/api/v1/analytics/metrics`);
       if (anaRes.ok) {
-        const anaData = await anaRes.json();
-        setAnalytics(anaData.production_metrics);
+        const anaData = await anaRes.json() as { production_metrics?: Analytics };
+        setAnalytics(anaData.production_metrics ?? null);
       }
       
       // 2. Fetch real active queues & audit logs from admin dashboard endpoints (if authenticated)
@@ -100,14 +136,14 @@ export default function LandingPage() {
           headers: { "Authorization": `Bearer ${token}` }
         });
         if (adminRes.ok) {
-          const adminData = await adminRes.json();
+          const adminData = await adminRes.json() as { recent_audit_logs?: AuditLog[] };
           setAuditLogs(adminData.recent_audit_logs || []);
         }
       }
-    } catch (err) {
+    } catch {
       console.log("Backend offline or unauthorized, utilizing pre-seeded visual fallbacks.");
     }
-  };
+  }, [API_URL]);
 
   useEffect(() => {
     refreshBackendData();
@@ -117,10 +153,7 @@ export default function LandingPage() {
       { id: "demo_donation_1", title: "Fresh Veg Biryani Boxes", pickup_address: "Kurnool Center, AP", status: "PUBLISHED", is_demo: true, latitude: 15.8284, longitude: 78.0373, food_items: [{ name: "Paneer Biryani Packets", quantity: 40, unit: "meals", is_leftover: false }] },
       { id: "demo_donation_2", title: "Unserved Sambar Rice", pickup_address: "Nellore, AP", status: "CLAIMED", is_demo: true, latitude: 14.4426, longitude: 79.9865, food_items: [{ name: "Rice and Sambar", quantity: 50, unit: "meals", is_leftover: false }] }
     ]);
-    setDemands([
-      { id: "demand_1", food_category: "veg", quantity_needed: 40, unit: "meals", priority: "high", latitude: 15.8284, longitude: 78.0373 }
-    ]);
-  }, [activeTab]);
+  }, [activeTab, refreshBackendData]);
 
   const handleParse = async () => {
     setParsing(true);
@@ -132,15 +165,15 @@ export default function LandingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: aiText })
       });
-      const data = await res.json();
+      const data = await res.json() as ParsedListing & ApiError;
       if (!res.ok) {
         throw new Error(data.detail || "Validation failed.");
       }
       setParsedData(data);
       setNewDonationTitle(data.name);
       setNewDonationQty(data.quantity);
-    } catch (err: any) {
-      setParseError(err.message);
+    } catch (err: unknown) {
+      setParseError(getErrorMessage(err));
     } finally {
       setParsing(false);
     }
@@ -155,9 +188,9 @@ export default function LandingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: ragQuestion })
       });
-      const data = await res.json();
+      const data = await res.json() as RagResponse;
       setRagResponse(data);
-    } catch (err: any) {
+    } catch {
       setRagResponse({ answer: "Failed to query backend RAG service.", citations: [] });
     } finally {
       setRagSearching(false);
@@ -198,7 +231,7 @@ export default function LandingPage() {
         })
       });
 
-      const data = await res.json();
+      const data = await res.json() as Donation & ApiError;
       if (!res.ok) {
         throw new Error(data.detail || "Server validation failed.");
       }
@@ -206,7 +239,7 @@ export default function LandingPage() {
       setDonations([data, ...donations]);
       setCreateMsg("Donation published successfully! Real database record saved.");
       refreshBackendData();
-    } catch (err: any) {
+    } catch {
       // Local visual seeding fallback if backend offline
       const fallbackDon = {
         id: "donation_" + Date.now(),
@@ -240,7 +273,7 @@ export default function LandingPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" }
       });
-      const assignData = await assignRes.json();
+      const assignData = await assignRes.json() as AssignResponse;
 
       setDonations(donations.map(d => d.id === donId ? { ...d, status: "CLAIMED" } : d));
       setActiveTask({
@@ -252,7 +285,7 @@ export default function LandingPage() {
         status: "ASSIGNED"
       });
       refreshBackendData();
-    } catch (err) {
+    } catch {
       // Local state fallback
       setDonations(donations.map(d => d.id === donId ? { ...d, status: "CLAIMED" } : d));
       setActiveTask({
@@ -274,7 +307,7 @@ export default function LandingPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" }
       });
-      const data = await res.json();
+      const data = await res.json() as ApiError;
       if (!res.ok) {
         throw new Error(data.detail || "QR Verification failed.");
       }
@@ -287,7 +320,7 @@ export default function LandingPage() {
         setDonations(donations.map(d => d.id === activeTask.donation_id ? { ...d, status: "COMPLETED" } : d));
       }
       refreshBackendData();
-    } catch (err) {
+    } catch {
       // Local fallback
       if (type === 'handoff') {
         setActiveTask({ ...activeTask, status: "PICKED_UP" });
@@ -468,8 +501,8 @@ export default function LandingPage() {
               <h2 className="text-xl font-extrabold text-slate-950">Active Donor Submissions</h2>
               
               <div className="space-y-4">
-                {donations.map((d, i) => (
-                  <div key={i} className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm flex justify-between items-center">
+                {donations.map((d) => (
+                  <div key={d.id} className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm flex justify-between items-center">
                     <div>
                       <h4 className="font-bold text-slate-950 text-sm">{d.title}</h4>
                       <p className="text-xs text-slate-500 flex items-center space-x-1 mt-1">
@@ -505,7 +538,7 @@ export default function LandingPage() {
                 </div>
                 <div>
                   <label className="block text-xxs font-bold text-slate-500 uppercase">Quantity (meals)</label>
-                  <input type="number" className="w-full p-2 border border-slate-300 rounded text-xs" value={newDonationQty} onChange={(e) => setNewDonationQty(parseInt(e.target.value))} required />
+                  <input type="number" className="w-full p-2 border border-slate-300 rounded text-xs" value={newDonationQty} onChange={(e) => setNewDonationQty(Number.parseInt(e.target.value, 10) || 0)} required />
                 </div>
                 
                 <div className="flex items-center space-x-2">
@@ -534,10 +567,10 @@ export default function LandingPage() {
             </div>
 
             <div className="grid sm:grid-cols-2 gap-6">
-              {donations.filter(d => d.status === "PUBLISHED").map((d, i) => {
+              {donations.filter(d => d.status === "PUBLISHED").map((d) => {
                 const score = 87.5;
                 return (
-                  <div key={i} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-4">
+                  <div key={d.id} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-4">
                     <div className="space-y-2">
                       <div className="flex justify-between items-start">
                         <h4 className="font-bold text-sm text-slate-950">{d.title}</h4>
@@ -632,7 +665,7 @@ export default function LandingPage() {
                 </div>
                 <div className="divide-y divide-slate-100 text-xs">
                   {auditLogs.map((l, i) => (
-                    <div key={i} className="px-4 py-3 flex justify-between">
+                    <div key={`${l.timestamp}-${l.action}-${i}`} className="px-4 py-3 flex justify-between">
                       <span className="font-bold text-slate-900">{l.action}</span>
                       <span className="text-slate-500">{l.resource}</span>
                       <span className="text-slate-500 font-mono text-xxs">{l.timestamp}</span>
