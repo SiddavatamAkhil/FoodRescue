@@ -20,3 +20,6 @@ The backend base path is `/api/v1/`.
 ### 4. AI & RAG (`/api/v1/ai`)
 - `POST /parse-listing`: Extracts structured data and flags plate leftovers.
 - `POST /knowledge-query`: RAG assistant with FSSAI citation and abstention capabilities.
+
+### 5. Accounts, onboarding and workspaces
+The endpoints added for the product redesign (registration with consent, email verification, password reset, onboarding, document upload, availability feeds, pickups with separate custody codes, incidents, reports and admin management) are listed in [docs/frontend/redesign_report.md](../frontend/redesign_report.md#3-backend-changes). The live OpenAPI schema is at `/api/v1/docs`.

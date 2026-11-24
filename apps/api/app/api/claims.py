@@ -5,10 +5,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import update
 from app.db.session import get_db
+from sqlalchemy import func
+from sqlalchemy.orm import selectinload
 from app.db.models import (
-    User, Donation, DonationStatus, Organization, VerificationStatus, Membership, AuditLog
+    User, Donation, DonationStatus, Organization, VerificationStatus, Membership, AuditLog, OrgType,
+    FoodItem, Notification, PickupTask
 )
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, is_org_member, verify_org_membership
+from app.schemas.donation import DonationResponse
 
 router = APIRouter()
 
@@ -32,13 +36,14 @@ async def claim_donation(
             detail="Error: Unverified recipient organization cannot claim donations."
         )
 
-    # Test 4: Recipient lacks capacity (e.g. mock capacity check)
-    # If the claiming organization's name is "Low Capacity NGO", we trigger a lacks capacity error
-    if "Low Capacity" in org.name:
+    # Only members of the claiming organization (or operations staff) may claim on its behalf.
+    if not await is_org_member(db, current_user, org_id):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Error: Recipient organization does not have sufficient daily capacity to handle this donation."
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: You do not belong to this organization."
         )
+    if org.type != OrgType.RECIPIENT:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only recipient organizations can claim donations.")
 
     # Use row-level locking (SELECT FOR UPDATE) to ensure concurrency safety (Test 1)
     # In sqlite, select with with_for_update() is accepted but fallback is standard locking.
@@ -66,8 +71,27 @@ async def claim_donation(
             detail=f"Donation cannot be claimed. Status is {donation.status}, expected PUBLISHED."
         )
 
+    # Test 4: Recipient lacks capacity. Compare today's claimed quantity plus this
+    # donation against the organization's declared daily capacity (meals/day).
+    if org.daily_capacity is not None:
+        items_res = await db.execute(select(func.coalesce(func.sum(FoodItem.quantity), 0.0)).filter(FoodItem.donation_id == donation_id))
+        this_qty = float(items_res.scalar() or 0.0)
+        start_of_day = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_res = await db.execute(
+            select(func.coalesce(func.sum(FoodItem.quantity), 0.0))
+            .join(Donation, Donation.id == FoodItem.donation_id)
+            .filter(Donation.claimed_by_org_id == org_id, Donation.updated_at >= start_of_day)
+        )
+        claimed_today = float(today_res.scalar() or 0.0)
+        if org.daily_capacity <= 0 or claimed_today + this_qty > org.daily_capacity:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Error: Recipient organization does not have sufficient daily capacity to handle this donation."
+            )
+
     # Concurrency safe update
     donation.status = DonationStatus.CLAIMED
+    donation.claimed_by_org_id = org_id
     history = list(donation.state_history or [])
     history.append({
         "status": "CLAIMED",
@@ -88,5 +112,39 @@ async def claim_donation(
     )
     db.add(audit)
 
+    db.add(Notification(
+        id=str(uuid.uuid4()), user_id=donation.creator_id, type="DONATION_CLAIMED",
+        title="Donation claimed",
+        message=f"'{donation.title}' was claimed by {org.name}. A volunteer pickup will be arranged.",
+    ))
+
     await db.commit()
     return {"message": "Donation claimed successfully", "donation_id": donation_id, "status": "CLAIMED"}
+
+
+@router.get("/organization/{org_id}")
+async def list_claims(
+    org_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _=Depends(verify_org_membership),
+):
+    """Donations claimed by a recipient organization, newest first, with pickup progress."""
+    res = await db.execute(
+        select(Donation)
+        .filter(Donation.claimed_by_org_id == org_id)
+        .options(selectinload(Donation.food_items), selectinload(Donation.organization), selectinload(Donation.pickup_tasks))
+        .order_by(Donation.updated_at.desc())
+    )
+    out = []
+    for d in res.scalars().all():
+        payload = DonationResponse.model_validate(d, from_attributes=True).model_dump()
+        payload["donor_name"] = d.organization.name if d.organization else None
+        task = d.pickup_tasks[-1] if d.pickup_tasks else None
+        payload["pickup"] = (
+            {"status": task.status, "picked_up_at": task.picked_up_at, "delivered_at": task.delivered_at,
+             "delivery_token": task.delivery_token if task.status == "PICKED_UP" or task.status == "ASSIGNED" else None}
+            if task else None
+        )
+        out.append(payload)
+    return out

@@ -7,16 +7,16 @@ async def test_donation_lifecycle_and_food_safety(client: AsyncClient):
     # Register donor
     reg_response = await client.post(
         "/api/v1/auth/register",
-        json={
+        json={"accept_terms": True,
             "email": "donor@foodrescue.org",
-            "password": "donorpassword",
+            "password": "donorpassword1",
             "full_name": "Donor User",
             "role": "DONOR"
         }
     )
     token = client.post(
         "/api/v1/auth/login",
-        data={"username": "donor@foodrescue.org", "password": "donorpassword"}
+        data={"username": "donor@foodrescue.org", "password": "donorpassword1"}
     )
     tok_data = (await token).json()["access_token"]
     headers = {"Authorization": f"Bearer {tok_data}"}
@@ -107,16 +107,16 @@ async def test_donation_lifecycle_and_food_safety(client: AsyncClient):
     # Register a separate donor user
     await client.post(
         "/api/v1/auth/register",
-        json={
+        json={"accept_terms": True,
             "email": "malicious_donor@foodrescue.org",
-            "password": "maliciouspassword",
+            "password": "maliciouspassword1",
             "full_name": "Malicious Donor",
             "role": "DONOR"
         }
     )
     mal_login = await client.post(
         "/api/v1/auth/login",
-        data={"username": "malicious_donor@foodrescue.org", "password": "maliciouspassword"}
+        data={"username": "malicious_donor@foodrescue.org", "password": "maliciouspassword1"}
     )
     mal_headers = {"Authorization": f"Bearer {mal_login.json()['access_token']}"}
 

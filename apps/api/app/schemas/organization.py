@@ -23,6 +23,9 @@ class OrganizationResponse(BaseModel):
     latitude: float
     longitude: float
     is_demo: bool
+    daily_capacity: Optional[float] = None
+    verification_notes: Optional[str] = None
+    profile: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
 

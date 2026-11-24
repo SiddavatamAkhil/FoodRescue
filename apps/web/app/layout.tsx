@@ -1,21 +1,23 @@
-import './globals.css'
-import type { Metadata } from 'next'
+import "@fontsource-variable/manrope";
+import "./globals.css";
+import type { Metadata, Viewport } from "next";
+import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: 'FoodRescue | Surplus Redistribution Platform',
-  description: 'AI-Powered Food Surplus Redistribution & Rescue Platform for Andhra Pradesh, India.',
-}
+  title: { default: "FoodRescue — Surplus food rescue network", template: "%s · FoodRescue" },
+  description:
+    "FoodRescue connects food businesses, NGOs and volunteers so safe surplus food reaches people instead of landfill.",
+  icons: { icon: "/icon.svg" },
+};
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export const viewport: Viewport = { themeColor: "#174C3C" };
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-slate-50 text-gray-900 min-h-screen flex flex-col">
-        {children}
+      <body className="min-h-screen">
+        <Providers>{children}</Providers>
       </body>
     </html>
-  )
+  );
 }

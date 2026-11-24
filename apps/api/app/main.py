@@ -22,6 +22,7 @@ from app.api import (
     admin,
     analytics,
     ai,
+    incidents,
 )
 
 app = FastAPI(
@@ -40,10 +41,7 @@ app = FastAPI(
 # CORS configuration
 # --------------------------------------------------
 
-allowed_origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+allowed_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
@@ -243,4 +241,16 @@ app.include_router(
     ai.router,
     prefix="/api/v1/ai",
     tags=["ai"],
+)
+
+app.include_router(
+    incidents.router,
+    prefix="/api/v1/incidents",
+    tags=["incidents"],
+)
+
+app.include_router(
+    incidents.contact_router,
+    prefix="/api/v1/contact",
+    tags=["contact"],
 )

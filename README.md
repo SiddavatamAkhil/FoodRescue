@@ -27,24 +27,27 @@ We implemented a complete production RAG pipeline inside `app/services/knowledge
 - **Configurable Weights:** Matches remaining organizations across normalized parameters (Distance: 25, Urgency: 20, Capacity: 10).
 - **Match Explanations:** Explains matching choices clearly: *"Matched because: 3.2 km away, accepts unserved vegetarian, verified organization."*
 
-### 3. Next.js 14 App Router Frontend
-A multi-lingual, responsive front-end application built with Next.js, Tailwind CSS, and TypeScript:
-- **Language Toggle:** Support for English and Telugu script.
-- **Interactive AI Parser Playground:** Lets users paste text reports, parses variables, and runs FSSAI safety-gate validation against plate leftovers.
-- **Interactive RAG Chat:** Connects directly to the FastAPI database, searching unserved food regulations and displaying citations dynamically.
+### 3. Product web app (Next.js 14)
+A role-based product with a public site, real authentication and a separate workspace for each account type:
+- **Public site:** home, how it works, for restaurants, for NGOs, live impact figures (no estimates), about, contact, privacy policy, terms. Telugu translation of the navigation and hero.
+- **Accounts:** sign up as a food donor, NGO / food bank, volunteer or corporate; email verification; password reset; "keep me signed in"; login rate limiting. Sessions are held in an httpOnly cookie, and every page under `/dashboard` is guarded.
+- **Onboarding:** role-specific details, verification documents, and an admin review workflow (pending, under review, verified, rejected, information required, suspended).
+- **Workspaces:** donor, NGO, volunteer, corporate and admin dashboards, each with its own navigation, all built on one design system.
+
+See [docs/frontend/design_system.md](./docs/frontend/design_system.md) and [docs/frontend/redesign_report.md](./docs/frontend/redesign_report.md).
 
 ---
 
 ## 🛡️ Mandated Operational Scenarios (All 10 Fully Passing!)
 
-The backend test suite covers all 10 mandated scenarios with 100% test coverage under a fast SQLite test runner executing in **0.77 seconds**:
+The backend test suite covers all 10 mandated scenarios, plus accounts, onboarding and custody-code tests (19 tests). It runs on SQLite by default, and on PostgreSQL when `TEST_DATABASE_URL` is set; CI runs both:
 
 | Scenario | Objective | Test Implementation |
 | :--- | :--- | :--- |
 | **Test 1** | Two recipients simultaneously claim the same donation. Exactly **one** succeeds. | `test_fulfillment.py::test_claims_and_qr_scenarios` (uses `asyncio.gather` and SQLAlchemy `SELECT FOR UPDATE` write lock) |
 | **Test 2** | Donation expires. Cannot be claimed. | `test_fulfillment.py::test_claims_and_qr_scenarios` (validates `pickup_deadline < now` boundary rejection) |
 | **Test 3** | Unverified organization attempts to claim. Rejected. | `test_fulfillment.py::test_claims_and_qr_scenarios` (verifies status `!= VERIFIED` blocks claim) |
-| **Test 4** | Recipient lacks capacity. Not eligible. | `test_fulfillment.py::test_claims_and_qr_scenarios` (models NGO storage and volume capacity boundaries) |
+| **Test 4** | Recipient lacks capacity. Not eligible. | `test_fulfillment.py::test_claims_and_qr_scenarios` (claim exceeds the NGO's declared `daily_capacity`) |
 | **Test 5** | Food listing contains plate leftovers. Rejected immediately. | `test_donations.py::test_donation_lifecycle_and_food_safety` and `test_ai.py` (validated using Pydantic safety validators) |
 | **Test 6** | AI parser produces invalid JSON. Schema validation catches it. | `test_ai.py::test_ai_parsing_and_rag_abstain` (schema parser catches invalid outputs and yields a 422 error) |
 | **Test 7** | RAG has no authoritative answer. Explicit abstention. | `test_ai.py::test_ai_parsing_and_rag_abstain` (returns explicit `"ABSTAIN"` state with citation fallback) |
@@ -74,7 +77,11 @@ FoodRescue has pre-configured, realistic, and distinctly labeled demo accounts (
 ### Stand Up All Services (Postgres, PostGIS, pgvector, Redis, Celery, Backend, Frontend)
 ```bash
 docker-compose up --build
+docker-compose exec api alembic upgrade head
+# Administrators can't sign up publicly. Create the first one (you'll be prompted for a password):
+docker-compose exec api python -m app.scripts.create_admin --email you@example.org --name "Your Name"
 ```
+Open http://localhost:3000. Without `SMTP_HOST`, verification and password-reset emails (including their links) are written to the API log: `docker-compose logs api`.
 
 ### Run Backend Unit Tests Locally
 Ensure you have local packages installed:
@@ -82,15 +89,17 @@ Ensure you have local packages installed:
 cd apps/api
 python3 -m pip install -r requirements.txt
 python3 -m pytest -v
+# Same suite against PostgreSQL (enforces foreign keys):
+TEST_DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/foodrescue_test python3 -m pytest
 ```
 
-### Compile Next.js Frontend Locally
+### Run the web app locally
 ```bash
 cd apps/web
-npm install
-npm run build
+npm ci
+API_URL=http://localhost:8000 npm run dev     # or: npm run lint && npm run build && npm start
 ```
-The Next.js 14 App Router application compiles flawlessly without a single warning or type mismatch.
+The browser never calls the API directly. Next.js route handlers keep the session cookie and proxy requests to `API_URL`.
 
 ---
 

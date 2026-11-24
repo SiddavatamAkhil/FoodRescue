@@ -28,6 +28,37 @@ jobs:
         cd apps/api
         python -m pytest
 
+  backend-tests-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: foodrescue_user
+          POSTGRES_PASSWORD: foodrescue_password
+          POSTGRES_DB: foodrescue_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U foodrescue_user" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+asyncpg://foodrescue_user:foodrescue_password@localhost:5432/foodrescue_test
+      DATABASE_URL: postgresql+asyncpg://foodrescue_user:foodrescue_password@localhost:5432/foodrescue_test
+      UPLOAD_DIR: /tmp/uploads
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: |
+        cd apps/api
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    - name: Run Pytest against PostgreSQL (enforces foreign keys)
+      run: |
+        cd apps/api
+        python -m pytest
+
   frontend-build:
     runs-on: ubuntu-latest
     steps:
@@ -41,8 +72,14 @@ jobs:
     - name: Install frontend dependencies
       run: |
         cd apps/web
-        npm install
+        npm ci
         
+    - name: Lint and type-check
+      run: |
+        cd apps/web
+        npm run lint
+        npx tsc --noEmit
+
     - name: Build Next.js
       run: |
         cd apps/web

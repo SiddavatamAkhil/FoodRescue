@@ -11,7 +11,7 @@ async def test_analytics_excludes_demo_records(client: AsyncClient, db_session: 
     admin_user = User(
         id="super_admin_test_id",
         email="super_admin@foodrescue.org",
-        hashed_password=hash_password("superpassword"),
+        hashed_password=hash_password("superpassword1"),
         full_name="Admin",
         role=UserRole.ADMIN,
         is_active=True
@@ -20,7 +20,7 @@ async def test_analytics_excludes_demo_records(client: AsyncClient, db_session: 
     await db_session.commit()
     login_admin = await client.post(
         "/api/v1/auth/login",
-        data={"username": "super_admin@foodrescue.org", "password": "superpassword"}
+        data={"username": "super_admin@foodrescue.org", "password": "superpassword1"}
     )
     headers = {"Authorization": f"Bearer {login_admin.json()['access_token']}"}
 

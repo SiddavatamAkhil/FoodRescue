@@ -42,6 +42,8 @@ class UserRole(str, enum.Enum):
 
     VOLUNTEER = "VOLUNTEER"
 
+    CORPORATE = "CORPORATE"
+
     OPS_MANAGER = "OPS_MANAGER"
 
     ADMIN = "ADMIN"
@@ -58,6 +60,8 @@ class OrgType(str, enum.Enum):
 
     RECIPIENT = "RECIPIENT"
 
+    CORPORATE = "CORPORATE"
+
 class VerificationStatus(str, enum.Enum):
 
     PENDING = "PENDING"
@@ -69,6 +73,8 @@ class VerificationStatus(str, enum.Enum):
     REJECTED = "REJECTED"
 
     SUSPENDED = "SUSPENDED"
+
+    INFO_REQUIRED = "INFO_REQUIRED"
 
 class DonationStatus(str, enum.Enum):
 
@@ -127,6 +133,20 @@ class User(Base):
     )
 
     is_active = Column(Boolean, default=True)
+
+    phone = Column(String, nullable=True)
+
+    email_verified = Column(Boolean, default=False, nullable=False)
+
+    phone_verified = Column(Boolean, default=False, nullable=False)
+
+    terms_accepted_at = Column(DateTime, nullable=True)
+
+    onboarding_completed = Column(Boolean, default=False, nullable=False)
+
+    profile = Column(JSON, default=dict)
+
+    last_login_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -202,6 +222,12 @@ class Organization(Base):
 
     ngo_darpan_id = Column(String, nullable=True)
 
+    daily_capacity = Column(Float, nullable=True)  # meals/day a recipient can absorb
+
+    profile = Column(JSON, default=dict)  # role-specific onboarding details
+
+    verification_notes = Column(String, nullable=True)
+
     address = Column(String, nullable=False)
 
     latitude = Column(Float, nullable=False)
@@ -249,6 +275,7 @@ class Organization(Base):
         "Donation",
 
         back_populates="organization",
+        foreign_keys="Donation.organization_id",
 
         cascade="all, delete-orphan",
 
@@ -429,6 +456,8 @@ class Donation(Base):
 
     storage_info = Column(String, nullable=True)
 
+    claimed_by_org_id = Column(String, ForeignKey("organizations.id"), nullable=True)
+
     is_demo = Column(Boolean, default=False)
 
     state_history = Column(JSON, default=list)
@@ -452,6 +481,7 @@ class Donation(Base):
         "Organization",
 
         back_populates="donations",
+        foreign_keys=[organization_id],
 
     )
 
@@ -627,6 +657,10 @@ class Volunteer(Base):
 
     vehicle_capacity = Column(Float, default=0.0)
 
+    service_area = Column(String, nullable=True)
+
+    availability = Column(JSON, default=dict)
+
     is_available = Column(Boolean, default=True)
 
     latitude = Column(Float, nullable=True)
@@ -686,6 +720,8 @@ class PickupTask(Base):
     picked_up_at = Column(DateTime, nullable=True)
 
     delivered_at = Column(DateTime, nullable=True)
+
+    delivery_token = Column(String, unique=True, index=True, nullable=True)
 
     donation = relationship("Donation", back_populates="pickup_tasks")
 
@@ -842,3 +878,48 @@ class KnowledgeChunk(Base):
     embedding = Column(JSON, nullable=True)
 
     # Stores a list of floats; pgvector can be mapped here in the future.
+
+
+
+class AuthToken(Base):
+    """Single-use tokens for email verification and password reset (stored hashed)."""
+
+    __tablename__ = "auth_tokens"
+
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    purpose = Column(String, nullable=False)  # "verify_email" | "reset_password"
+    token_hash = Column(String, nullable=False, unique=True, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Incident(Base):
+    """Operational or food-safety incident reported against a rescue."""
+
+    __tablename__ = "incidents"
+
+    id = Column(String, primary_key=True, index=True)
+    reporter_id = Column(String, ForeignKey("users.id"), nullable=False)
+    donation_id = Column(String, ForeignKey("donations.id", ondelete="SET NULL"), nullable=True)
+    category = Column(String, nullable=False)  # food_safety | no_show | quantity_mismatch | other
+    description = Column(String, nullable=False)
+    status = Column(String, default="OPEN", nullable=False)  # OPEN | INVESTIGATING | RESOLVED
+    resolution_notes = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ContactMessage(Base):
+    """Enquiries submitted from the public contact page."""
+
+    __tablename__ = "contact_messages"
+
+    id = Column(String, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    email = Column(String, nullable=False)
+    organization = Column(String, nullable=True)
+    topic = Column(String, nullable=False)
+    message = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)

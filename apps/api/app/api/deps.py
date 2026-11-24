@@ -71,3 +71,29 @@ async def verify_org_membership(
             detail="Access denied: You do not belong to this organization."
         )
     return membership
+
+
+async def get_user_organization(db: AsyncSession, user: User):
+    """Return the first organization the user belongs to, or None."""
+    from app.db.models import Organization
+
+    res = await db.execute(
+        select(Organization)
+        .join(Membership, Membership.organization_id == Organization.id)
+        .filter(Membership.user_id == user.id)
+        .order_by(Membership.created_at)
+    )
+    return res.scalars().first()
+
+
+async def is_org_member(db: AsyncSession, user: User, org_id: str) -> bool:
+    if user.role in [UserRole.ADMIN, UserRole.OPS_MANAGER]:
+        return True
+    res = await db.execute(
+        select(Membership).filter(Membership.user_id == user.id, Membership.organization_id == org_id)
+    )
+    return res.scalars().first() is not None
+
+
+def is_staff(user: User) -> bool:
+    return user.role in [UserRole.ADMIN, UserRole.OPS_MANAGER]

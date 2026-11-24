@@ -8,9 +8,9 @@ async def test_create_and_verify_organization(client: AsyncClient, db_session: A
     # Register donor user
     reg_response = await client.post(
         "/api/v1/auth/register",
-        json={
+        json={"accept_terms": True,
             "email": "donor_admin@foodrescue.org",
-            "password": "securepassword",
+            "password": "securepassword1",
             "full_name": "Donor Admin",
             "role": "DONOR"
         }
@@ -22,7 +22,7 @@ async def test_create_and_verify_organization(client: AsyncClient, db_session: A
         "/api/v1/auth/login",
         data={
             "username": "donor_admin@foodrescue.org",
-            "password": "securepassword"
+            "password": "securepassword1"
         }
     )
     token = login_response.json()["access_token"]
@@ -52,7 +52,7 @@ async def test_create_and_verify_organization(client: AsyncClient, db_session: A
     admin_user = User(
         id="admin_org_test_id",
         email="admin@foodrescue.org",
-        hashed_password=hash_password("adminpassword"),
+        hashed_password=hash_password("adminpassword1"),
         full_name="System Admin",
         role=UserRole.ADMIN,
         is_active=True
@@ -64,7 +64,7 @@ async def test_create_and_verify_organization(client: AsyncClient, db_session: A
         "/api/v1/auth/login",
         data={
             "username": "admin@foodrescue.org",
-            "password": "adminpassword"
+            "password": "adminpassword1"
         }
     )
     admin_token = admin_login.json()["access_token"]

@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -23,13 +24,13 @@ async def test_complete_e2e_food_rescue_journey(client: AsyncClient, db_session:
     # Register & Login Donor
     reg_donor = await client.post(
         "/api/v1/auth/register",
-        json={"email": "donor_e2e@foodrescue.org", "password": "donorpassword", "full_name": "E2E Donor Owner", "role": "DONOR"}
+        json={"accept_terms": True, "email": "donor_e2e@foodrescue.org", "password": "donorpassword1", "full_name": "E2E Donor Owner", "role": "DONOR"}
     )
     assert reg_donor.status_code == 201
     
     login_donor = await client.post(
         "/api/v1/auth/login",
-        data={"username": "donor_e2e@foodrescue.org", "password": "donorpassword"}
+        data={"username": "donor_e2e@foodrescue.org", "password": "donorpassword1"}
     )
     donor_token = login_donor.json()["access_token"]
     donor_headers = {"Authorization": f"Bearer {donor_token}"}
@@ -37,13 +38,13 @@ async def test_complete_e2e_food_rescue_journey(client: AsyncClient, db_session:
     # Register & Login NGO Recipient
     reg_ngo = await client.post(
         "/api/v1/auth/register",
-        json={"email": "ngo_e2e@foodrescue.org", "password": "ngopassword", "full_name": "E2E NGO Rep", "role": "RECIPIENT"}
+        json={"accept_terms": True, "email": "ngo_e2e@foodrescue.org", "password": "ngopassword1", "full_name": "E2E NGO Rep", "role": "RECIPIENT"}
     )
     assert reg_ngo.status_code == 201
     
     login_ngo = await client.post(
         "/api/v1/auth/login",
-        data={"username": "ngo_e2e@foodrescue.org", "password": "ngopassword"}
+        data={"username": "ngo_e2e@foodrescue.org", "password": "ngopassword1"}
     )
     ngo_token = login_ngo.json()["access_token"]
     ngo_headers = {"Authorization": f"Bearer {ngo_token}"}
@@ -69,7 +70,7 @@ async def test_complete_e2e_food_rescue_journey(client: AsyncClient, db_session:
     admin_user = User(
         id="admin_e2e_test_id",
         email="admin_e2e@foodrescue.org",
-        hashed_password=hash_password("adminpassword"),
+        hashed_password=hash_password("adminpassword1"),
         full_name="E2E Admin",
         role=UserRole.ADMIN,
         is_active=True
@@ -78,7 +79,7 @@ async def test_complete_e2e_food_rescue_journey(client: AsyncClient, db_session:
     await db_session.commit()
     login_admin = await client.post(
         "/api/v1/auth/login",
-        data={"username": "admin_e2e@foodrescue.org", "password": "adminpassword"}
+        data={"username": "admin_e2e@foodrescue.org", "password": "adminpassword1"}
     )
     admin_token = login_admin.json()["access_token"]
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
@@ -107,7 +108,7 @@ async def test_complete_e2e_food_rescue_journey(client: AsyncClient, db_session:
         json={
             "title": ai_data["name"],
             "pickup_address": "Kurnool Event Hall",
-            "pickup_deadline": "2026-10-09T23:00:00",
+            "pickup_deadline": (datetime.utcnow() + timedelta(hours=6)).isoformat(),
             "latitude": 15.8284,
             "longitude": 78.0373,
             "food_items": [
@@ -116,8 +117,8 @@ async def test_complete_e2e_food_rescue_journey(client: AsyncClient, db_session:
                     "quantity": ai_data["quantity"],
                     "unit": ai_data["unit"],
                     "is_veg": ai_data["is_veg"],
-                    "prep_time": "2026-10-09T13:00:00",
-                    "expiry_time": "2026-10-09T19:00:00",
+                    "prep_time": (datetime.utcnow() - timedelta(hours=1)).isoformat(),
+                    "expiry_time": (datetime.utcnow() + timedelta(hours=8)).isoformat(),
                     "is_leftover": False
                 }
             ]
@@ -156,14 +157,14 @@ async def test_complete_e2e_food_rescue_journey(client: AsyncClient, db_session:
     # Register logistics volunteer
     reg_volunteer = await client.post(
         "/api/v1/auth/register",
-        json={"email": "volunteer_e2e@foodrescue.org", "password": "volunteerpassword", "full_name": "E2E Volunteer", "role": "VOLUNTEER"}
+        json={"accept_terms": True, "email": "volunteer_e2e@foodrescue.org", "password": "volunteerpassword1", "full_name": "E2E Volunteer", "role": "VOLUNTEER"}
     )
     assert reg_volunteer.status_code == 201
     volunteer_id = reg_volunteer.json()["id"]
     
     login_vol = await client.post(
         "/api/v1/auth/login",
-        data={"username": "volunteer_e2e@foodrescue.org", "password": "volunteerpassword"}
+        data={"username": "volunteer_e2e@foodrescue.org", "password": "volunteerpassword1"}
     )
     vol_headers = {"Authorization": f"Bearer {login_vol.json()['access_token']}"}
 
@@ -174,6 +175,7 @@ async def test_complete_e2e_food_rescue_journey(client: AsyncClient, db_session:
     )
     assert assign_res.status_code == 201
     qr_token = assign_res.json()["qr_token"]
+    delivery_token = assign_res.json()["delivery_token"]
 
     # Handoff Scan (Verify Pickup QR)
     verify_pickup = await client.post(
@@ -184,7 +186,7 @@ async def test_complete_e2e_food_rescue_journey(client: AsyncClient, db_session:
 
     # Delivery Scan (Confirm Delivery QR)
     verify_delivery = await client.post(
-        f"/api/v1/pickups/verify-handoff?qr_token={qr_token}&event_type=DELIVERY",
+        f"/api/v1/pickups/verify-handoff?qr_token={delivery_token}&event_type=DELIVERY",
         headers=vol_headers
     )
     assert verify_delivery.status_code == 200

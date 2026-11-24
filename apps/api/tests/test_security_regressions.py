@@ -9,7 +9,7 @@ async def test_public_registration_cannot_create_admin(client: AsyncClient):
     # Attempting to register as ADMIN must fail
     res_admin = await client.post(
         "/api/v1/auth/register",
-        json={
+        json={"accept_terms": True,
             "email": "malicious_admin@foodrescue.org",
             "password": "attackpassword123",
             "full_name": "Malicious User",
@@ -22,7 +22,7 @@ async def test_public_registration_cannot_create_admin(client: AsyncClient):
     # Attempting to register as OPS_MANAGER must fail
     res_ops = await client.post(
         "/api/v1/auth/register",
-        json={
+        json={"accept_terms": True,
             "email": "malicious_ops@foodrescue.org",
             "password": "attackpassword123",
             "full_name": "Malicious User",
@@ -35,7 +35,7 @@ async def test_public_registration_cannot_create_admin(client: AsyncClient):
     # Registering as DONOR must succeed
     res_donor = await client.post(
         "/api/v1/auth/register",
-        json={
+        json={"accept_terms": True,
             "email": "valid_donor@foodrescue.org",
             "password": "validpassword123",
             "full_name": "Valid Donor",
