@@ -16,11 +16,11 @@ async def test_ai_parsing_and_rag_abstain(client: AsyncClient, db_session: Async
     # Setup headers with a registered user
     await client.post(
         "/api/v1/auth/register",
-        json={"email": "ai_user@foodrescue.org", "password": "aipassword", "full_name": "AI User", "role": "DONOR"}
+        json={"accept_terms": True, "email": "ai_user@foodrescue.org", "password": "aipassword1", "full_name": "AI User", "role": "DONOR"}
     )
     login_res = await client.post(
         "/api/v1/auth/login",
-        data={"username": "ai_user@foodrescue.org", "password": "aipassword"}
+        data={"username": "ai_user@foodrescue.org", "password": "aipassword1"}
     )
     headers = {"Authorization": f"Bearer {login_res.json()['access_token']}"}
 

@@ -10,7 +10,7 @@ import uuid
 async def test_register_and_login(client: AsyncClient):
     reg_response = await client.post(
         "/api/v1/auth/register",
-        json={
+        json={"accept_terms": True,
             "email": "test@foodrescue.org",
             "password": "strongpassword123",
             "full_name": "Test User",

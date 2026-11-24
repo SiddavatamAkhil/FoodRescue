@@ -7,12 +7,17 @@ from httpx import AsyncClient, ASGITransport
 from app.main import app
 from app.db.session import Base, get_db
 
-# Use SQLite in-memory for fast, reliable unit/integration testing
-DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+import os
+from sqlalchemy.pool import NullPool
 
-engine = create_async_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False}
+# SQLite in-memory by default for speed. Set TEST_DATABASE_URL to a PostgreSQL URL to run
+# the same suite with real foreign-key enforcement and row locking.
+DATABASE_URL = os.getenv("TEST_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+
+engine = (
+    create_async_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+    if DATABASE_URL.startswith("sqlite")
+    else create_async_engine(DATABASE_URL, poolclass=NullPool)
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -50,3 +55,11 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limits():
+    from app.api import auth, incidents
+    for limiter in (auth.login_failures, auth.register_limiter, auth.email_limiter, incidents.contact_limiter):
+        limiter.reset()
+    yield

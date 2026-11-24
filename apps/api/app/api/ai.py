@@ -276,3 +276,12 @@ async def ingest_knowledge(
         "chunks_created": chunks_created,
         "created_by": current_user.id,
     }
+
+
+@router.get("/status")
+async def ai_status():
+    """Whether a real language model is configured. The mock provider is for automated tests only."""
+    from app.services.ai_providers import MockLLMProvider
+
+    configured = not isinstance(get_llm_provider(), MockLLMProvider)
+    return {"listing_assistant": configured, "knowledge_assistant": configured}

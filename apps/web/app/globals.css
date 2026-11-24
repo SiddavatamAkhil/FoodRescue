@@ -2,8 +2,51 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  background-color: #f9fafb;
-  color: #111827;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-canvas text-ink font-sans text-base antialiased;
+    font-feature-settings: "tnum" 0;
+  }
+  h1, h2, h3, h4 {
+    @apply text-ink font-semibold;
+  }
+  :focus-visible {
+    outline: 2px solid #174C3C;
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: #B8D6B2;
+    color: #10392D;
+  }
+  .tabular { font-variant-numeric: tabular-nums; }
+}
+
+@layer components {
+  .link {
+    @apply text-forest underline decoration-forest/30 underline-offset-2 hover:decoration-forest;
+  }
+  .skeleton {
+    @apply relative overflow-hidden rounded bg-line/70;
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+    animation: shimmer 1.4s infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

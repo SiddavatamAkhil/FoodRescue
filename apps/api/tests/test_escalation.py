@@ -2,7 +2,7 @@ import pytest
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from app.db.models import Donation, DonationStatus, Notification, AuditLog
+from app.db.models import Donation, DonationStatus, Notification, AuditLog, User, UserRole, Organization, OrgType
 from app.services.escalation_engine import run_escalation_checks
 
 @pytest.mark.asyncio
@@ -35,6 +35,10 @@ async def test_escalation_and_auto_expiry(db_session: AsyncSession):
         pickup_deadline=now + timedelta(hours=1) # Expiring in 1 hour
     )
     
+    # Parent rows so the test is valid with foreign keys enforced (PostgreSQL).
+    db_session.add(User(id="user_dummy", email="dummy@foodrescue.org", hashed_password="...", full_name="Dummy", role=UserRole.DONOR))
+    db_session.add(Organization(id="org_dummy", name="Dummy Org", type=OrgType.DONOR, address="AP", latitude=16.5, longitude=80.6))
+    await db_session.flush()
     db_session.add_all([expired_donation, at_risk_donation])
     await db_session.commit()
     

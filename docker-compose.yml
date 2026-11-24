@@ -40,6 +40,10 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=demo_secret_key_must_be_changed_in_production
       - ENVIRONMENT=development
+      - FRONTEND_URL=http://localhost:3000
+      - UPLOAD_DIR=/data/uploads
+    volumes:
+      - uploads:/data/uploads
     ports:
       - "8000:8000"
     depends_on:
@@ -71,10 +75,13 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      # The web server proxies API calls (and holds the session cookie), so it talks to the
+      # API over the internal Docker network rather than from the browser.
+      - API_URL=http://api:8000
     depends_on:
       - api
 
 volumes:
   pgdata:
   redisdata:
+  uploads:

@@ -33,6 +33,7 @@ async def ingest_document(
         language=language,
     )
     db.add(doc)
+    await db.flush()  # document row must exist before its chunks reference it
 
     # Split content into chunks of approximately 500 characters.
     paragraphs = [

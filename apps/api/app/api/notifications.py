@@ -57,3 +57,33 @@ async def trigger_mock_notification(
 ):
     await send_realtime_notification(current_user.id, title, message)
     return {"status": "sent"}
+
+
+@router.get("/")
+async def list_notifications(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    res = await db.execute(
+        select(Notification).filter(Notification.user_id == current_user.id)
+        .order_by(Notification.created_at.desc()).limit(50)
+    )
+    return [
+        {"id": n.id, "type": n.type, "title": n.title, "message": n.message, "is_read": n.is_read,
+         "created_at": n.created_at}
+        for n in res.scalars().all()
+    ]
+
+
+@router.post("/read-all")
+async def mark_all_read(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    res = await db.execute(
+        select(Notification).filter(Notification.user_id == current_user.id, Notification.is_read == False)  # noqa: E712
+    )
+    for n in res.scalars().all():
+        n.is_read = True
+    await db.commit()
+    return {"status": "ok"}

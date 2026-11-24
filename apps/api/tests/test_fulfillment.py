@@ -22,7 +22,7 @@ async def test_claims_and_qr_scenarios(client: AsyncClient, db_session: AsyncSes
     org_ngo_unverified = Organization(id="ngo_unv", name="Unverified NGO", type=OrgType.RECIPIENT, address="AP", latitude=16.51, longitude=80.61, verification_status=VerificationStatus.PENDING)
     
     # Org 3: Lacks capacity
-    org_ngo_low_cap = Organization(id="ngo_low", name="Low Capacity NGO", type=OrgType.RECIPIENT, address="AP", latitude=16.51, longitude=80.61, verification_status=VerificationStatus.VERIFIED)
+    org_ngo_low_cap = Organization(id="ngo_low", name="Low Capacity NGO", type=OrgType.RECIPIENT, address="AP", latitude=16.51, longitude=80.61, verification_status=VerificationStatus.VERIFIED, daily_capacity=0)
 
     db_session.add_all([u_donor, u_ngo1, u_ngo2, u_ngo3, org_donor, org_ngo_verified, org_ngo_unverified, org_ngo_low_cap])
     await db_session.commit()
@@ -45,14 +45,23 @@ async def test_claims_and_qr_scenarios(client: AsyncClient, db_session: AsyncSes
     # Register/Login NGO 1
     reg_ngo = await client.post(
         "/api/v1/auth/register",
-        json={"email": "ngo1@foodrescue.org", "password": "ngopassword", "full_name": "NGO Representative", "role": "RECIPIENT"}
+        json={"accept_terms": True, "email": "ngo1@foodrescue.org", "password": "ngopassword1", "full_name": "NGO Representative", "role": "RECIPIENT"}
     )
     login_ngo = await client.post(
         "/api/v1/auth/login",
-        data={"username": "ngo1@foodrescue.org", "password": "ngopassword"}
+        data={"username": "ngo1@foodrescue.org", "password": "ngopassword1"}
     )
     token = login_ngo.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
+
+    # The NGO representative belongs to the recipient organizations it claims for.
+    ngo_user_id = reg_ngo.json()["id"]
+    db_session.add_all([
+        Membership(id="m_ngo_v", user_id=ngo_user_id, organization_id="ngo_v", role=OrgRole.ADMIN),
+        Membership(id="m_ngo_low", user_id=ngo_user_id, organization_id="ngo_low", role=OrgRole.ADMIN),
+        Membership(id="m_ngo_unv", user_id=ngo_user_id, organization_id="ngo_unv", role=OrgRole.ADMIN),
+    ])
+    await db_session.commit()
 
     # Test 3: Unverified organization attempts to claim -> Rejected
     unv_res = await client.post(
