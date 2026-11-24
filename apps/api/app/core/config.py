@@ -1,6 +1,30 @@
 import os
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def normalize_database_url(url: str) -> str:
+    """Accept connection strings as hosting providers give them (Neon, Render, Supabase).
+
+    - postgres:// or postgresql:// becomes postgresql+asyncpg://
+    - libpq-only options (sslmode, channel_binding) that asyncpg rejects are translated or removed
+    """
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+    if url.startswith("postgresql://"):
+        url = "postgresql+asyncpg://" + url[len("postgresql://"):]
+    if not url.startswith("postgresql+asyncpg://"):
+        return url
+    parts = urlsplit(url)
+    query = dict(parse_qsl(parts.query))
+    sslmode = query.pop("sslmode", None)
+    query.pop("channel_binding", None)
+    if sslmode in ("require", "verify-ca", "verify-full") and "ssl" not in query:
+        query["ssl"] = "require"
+    return urlunsplit(parts._replace(query=urlencode(query)))
 
 class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://foodrescue_user:foodrescue_password@localhost:5432/foodrescue"
@@ -40,6 +64,11 @@ class Settings(BaseSettings):
     # Rate limits (per client IP + identifier)
     LOGIN_MAX_FAILURES: int = 5
     LOGIN_WINDOW_SECONDS: int = 900
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def _normalize_db_url(cls, v: str) -> str:
+        return normalize_database_url(v.strip())
 
     model_config = SettingsConfigDict(
         env_file=".env",

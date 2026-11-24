@@ -19,6 +19,12 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
+# Use the app's DATABASE_URL (from the environment or apps/api/.env) instead of the
+# placeholder in alembic.ini, so migrations run against the same database as the API.
+from app.core.config import settings as _settings  # noqa: E402
+
+config.set_main_option("sqlalchemy.url", _settings.DATABASE_URL.replace("%", "%%"))
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
