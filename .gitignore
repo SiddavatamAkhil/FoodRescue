@@ -54,3 +54,5 @@ Thumbs.db
 __MACOSX/
 uploads/
 *.tsbuildinfo
+*.db
+apps/web/.env.local
